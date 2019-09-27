@@ -29,15 +29,12 @@ type FetchSourceFactory interface {
 	NewFetchSource(
 		logger lager.Logger,
 		worker Worker,
-		source atc.Source,
-		params atc.Params,
 		owner db.ContainerOwner,
 		resourceDir string,
 		cache db.UsedResourceCache,
 		resource resource.Resource,
 		resourceTypes atc.VersionedResourceTypes,
 		containerSpec ContainerSpec,
-		processSpec runtime.ProcessSpec,
 		containerMetadata db.ContainerMetadata,
 		imageFetchingDelegate ImageFetchingDelegate,
 	) FetchSource
@@ -58,30 +55,24 @@ func NewFetchSourceFactory(
 func (r *fetchSourceFactory) NewFetchSource(
 	logger lager.Logger,
 	worker Worker,
-	source atc.Source,
-	params atc.Params,
 	owner db.ContainerOwner,
 	resourceDir string,
 	cache db.UsedResourceCache,
 	resource resource.Resource,
 	resourceTypes atc.VersionedResourceTypes,
 	containerSpec ContainerSpec,
-	processSpec runtime.ProcessSpec,
 	containerMetadata db.ContainerMetadata,
 	imageFetchingDelegate ImageFetchingDelegate,
 ) FetchSource {
 	return &resourceInstanceFetchSource{
 		logger:                 logger,
 		worker:                 worker,
-		source:                 source,
-		params:                 params,
 		owner:                  owner,
 		resourceDir:            resourceDir,
 		cache:                  cache,
 		resource:               resource,
 		resourceTypes:          resourceTypes,
 		containerSpec:          containerSpec,
-		processSpec:            processSpec,
 		containerMetadata:      containerMetadata,
 		imageFetchingDelegate:  imageFetchingDelegate,
 		dbResourceCacheFactory: r.resourceCacheFactory,
@@ -91,15 +82,12 @@ func (r *fetchSourceFactory) NewFetchSource(
 type resourceInstanceFetchSource struct {
 	logger                 lager.Logger
 	worker                 Worker
-	source                 atc.Source
-	params                 atc.Params
 	owner                  db.ContainerOwner
 	resourceDir            string
 	cache                  db.UsedResourceCache
 	resource               resource.Resource
 	resourceTypes          atc.VersionedResourceTypes
 	containerSpec          ContainerSpec
-	processSpec            runtime.ProcessSpec
 	containerMetadata      db.ContainerMetadata
 	imageFetchingDelegate  ImageFetchingDelegate
 	dbResourceCacheFactory db.ResourceCacheFactory
@@ -209,39 +197,7 @@ func (s *resourceInstanceFetchSource) Create(ctx context.Context) (GetResult, Vo
 	// TODO This is pure EVIL
 	//events := make(chan runtime.Event, 100)
 
-	// todo: we want to decouple this resource from the container
-	//res := s.resourceFactory.NewResourceForContainer(container)
-	//versionedSource, err = res.Get(
-	//	ctx,
-	//	volume,
-	//	runtime.IOConfig{
-	//		Stdout: s.imageFetchingDelegate.Stdout(),
-	//		Stderr: s.imageFetchingDelegate.Stderr(),
-	//	},
-	//	s.resourceInstance.Source(),
-	//	s.resourceInstance.Params(),
-	//	s.resourceInstance.Version(),
-	//)
-	//if err != nil {
-	//	sLog.Error("failed-to-fetch-resource", err)
-	//	return nil, err
-	//}
-
 	vr, err = s.resource.Get(ctx, container)
-	//err = RunScript(
-	//	ctx,
-	//	container,
-	//	s.processSpec.Path,
-	//	s.processSpec.Args,
-	//	runtime.GetRequest{
-	//		Params: s.params,
-	//		Source: s.source,
-	//	},
-	//	&vr,
-	//	s.processSpec.StderrWriter,
-	//	true,
-	//	events,
-	//)
 
 	if err != nil {
 		sLog.Error("failed-to-fetch-resource", err)

@@ -11,8 +11,6 @@ import (
 
 	"github.com/concourse/concourse/atc/resource"
 
-	"github.com/concourse/concourse/atc/runtime"
-
 	"github.com/concourse/baggageclaim"
 	"github.com/concourse/concourse/atc/metric"
 	"github.com/concourse/concourse/atc/worker/gclient"
@@ -63,15 +61,13 @@ type Worker interface {
 		containerMetadata db.ContainerMetadata,
 		gardenWorker Worker,
 		containerSpec ContainerSpec,
-		processSpec runtime.ProcessSpec,
 		resource resource.Resource,
 		resourceTypes atc.VersionedResourceTypes,
-		source atc.Source,
-		params atc.Params,
 		owner db.ContainerOwner,
 		resourceDir string,
 		imageFetchingDelegate ImageFetchingDelegate,
 		cache db.UsedResourceCache,
+		lockName string,
 	) (GetResult, Volume, error)
 
 	CertsVolume(lager.Logger) (volume Volume, found bool, err error)
@@ -201,15 +197,13 @@ func (worker *gardenWorker) Fetch(
 	containerMetadata db.ContainerMetadata,
 	gardenWorker Worker,
 	containerSpec ContainerSpec,
-	processSpec runtime.ProcessSpec,
 	resource resource.Resource,
 	resourceTypes atc.VersionedResourceTypes,
-	source atc.Source,
-	params atc.Params,
 	owner db.ContainerOwner,
 	resourceDir string,
 	imageFetchingDelegate ImageFetchingDelegate,
 	cache db.UsedResourceCache,
+	lockName string,
 ) (GetResult, Volume, error) {
 	return worker.fetcher.Fetch(
 		ctx,
@@ -217,15 +211,13 @@ func (worker *gardenWorker) Fetch(
 		containerMetadata,
 		gardenWorker,
 		containerSpec,
-		processSpec,
 		resource,
 		resourceTypes,
-		source,
-		params,
 		owner,
 		resourceDir,
 		imageFetchingDelegate,
 		cache,
+		lockName,
 	)
 }
 
