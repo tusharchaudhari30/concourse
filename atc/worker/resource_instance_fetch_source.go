@@ -35,6 +35,7 @@ type FetchSourceFactory interface {
 		resource resource.Resource,
 		resourceTypes atc.VersionedResourceTypes,
 		containerSpec ContainerSpec,
+		processSpec runtime.ProcessSpec,
 		containerMetadata db.ContainerMetadata,
 		imageFetchingDelegate ImageFetchingDelegate,
 	) FetchSource
@@ -61,6 +62,7 @@ func (r *fetchSourceFactory) NewFetchSource(
 	resource resource.Resource,
 	resourceTypes atc.VersionedResourceTypes,
 	containerSpec ContainerSpec,
+	processSpec runtime.ProcessSpec,
 	containerMetadata db.ContainerMetadata,
 	imageFetchingDelegate ImageFetchingDelegate,
 ) FetchSource {
@@ -73,6 +75,7 @@ func (r *fetchSourceFactory) NewFetchSource(
 		resource:               resource,
 		resourceTypes:          resourceTypes,
 		containerSpec:          containerSpec,
+		processSpec:            processSpec,
 		containerMetadata:      containerMetadata,
 		imageFetchingDelegate:  imageFetchingDelegate,
 		dbResourceCacheFactory: r.resourceCacheFactory,
@@ -88,6 +91,7 @@ type resourceInstanceFetchSource struct {
 	resource               resource.Resource
 	resourceTypes          atc.VersionedResourceTypes
 	containerSpec          ContainerSpec
+	processSpec            runtime.ProcessSpec
 	containerMetadata      db.ContainerMetadata
 	imageFetchingDelegate  ImageFetchingDelegate
 	dbResourceCacheFactory db.ResourceCacheFactory
@@ -197,7 +201,7 @@ func (s *resourceInstanceFetchSource) Create(ctx context.Context) (GetResult, Vo
 	// TODO This is pure EVIL
 	//events := make(chan runtime.Event, 100)
 
-	vr, err = s.resource.Get(ctx, container)
+	vr, err = s.resource.Get(ctx, s.processSpec, container)
 
 	if err != nil {
 		sLog.Error("failed-to-fetch-resource", err)

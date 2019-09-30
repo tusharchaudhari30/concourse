@@ -201,6 +201,7 @@ func (step *GetStep) Run(ctx context.Context, state RunState) error {
 		params,
 		version,
 	)
+
 	// start of workerClient.RunGetStep?
 	getResult, err := step.workerClient.RunGetStep(
 		ctx,

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/concourse/concourse/atc/runtime"
+
 	"github.com/concourse/concourse/atc/resource"
 
 	"github.com/concourse/baggageclaim"
@@ -61,6 +63,7 @@ type Worker interface {
 		containerMetadata db.ContainerMetadata,
 		gardenWorker Worker,
 		containerSpec ContainerSpec,
+		processSpec runtime.ProcessSpec,
 		resource resource.Resource,
 		resourceTypes atc.VersionedResourceTypes,
 		owner db.ContainerOwner,
@@ -197,6 +200,7 @@ func (worker *gardenWorker) Fetch(
 	containerMetadata db.ContainerMetadata,
 	gardenWorker Worker,
 	containerSpec ContainerSpec,
+	processSpec runtime.ProcessSpec,
 	resource resource.Resource,
 	resourceTypes atc.VersionedResourceTypes,
 	owner db.ContainerOwner,
@@ -211,6 +215,7 @@ func (worker *gardenWorker) Fetch(
 		containerMetadata,
 		gardenWorker,
 		containerSpec,
+		processSpec,
 		resource,
 		resourceTypes,
 		owner,

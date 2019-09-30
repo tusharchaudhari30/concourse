@@ -329,8 +329,8 @@ func (client *client) RunGetStep(
 	lockType := resourceInstanceLockID{
 		Type:       containerSpec.ImageSpec.ResourceType,
 		Version:    cache.Version(),
-		Source:     resource.Source,
-		Params:     resource.Params,
+		Source:     resource.Source(),
+		Params:     resource.Params(),
 		WorkerName: chosenWorker.Name(),
 	}
 	lockName, err := lockName(lockType)
@@ -349,6 +349,7 @@ func (client *client) RunGetStep(
 		containerMetadata,
 		chosenWorker,
 		containerSpec,
+		processSpec,
 		resource,
 		resourceTypes,
 		owner,
@@ -552,7 +553,7 @@ func (client *client) RunPutStep(
 
 	var result PutResult
 	// TODO: pass in events to resource.Put?
-	vr, err = resource.Put(ctx, container)
+	vr, err = resource.Put(ctx, spec, container)
 	//err = RunScript(
 	//	ctx,
 	//	container,

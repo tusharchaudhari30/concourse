@@ -7,6 +7,8 @@ import (
 	"io"
 	"time"
 
+	"github.com/concourse/concourse/atc/runtime"
+
 	"github.com/concourse/concourse/atc/resource"
 
 	"code.cloudfoundry.org/clock"
@@ -30,6 +32,7 @@ type Fetcher interface {
 		containerMetadata db.ContainerMetadata,
 		gardenWorker Worker,
 		containerSpec ContainerSpec,
+		processSpec runtime.ProcessSpec,
 		resource resource.Resource,
 		resourceTypes atc.VersionedResourceTypes,
 		owner db.ContainerOwner,
@@ -64,6 +67,7 @@ func (f *fetcher) Fetch(
 	containerMetadata db.ContainerMetadata,
 	gardenWorker Worker,
 	containerSpec ContainerSpec,
+	processSpec runtime.ProcessSpec,
 	resource resource.Resource,
 	resourceTypes atc.VersionedResourceTypes,
 	owner db.ContainerOwner,
@@ -78,7 +82,9 @@ func (f *fetcher) Fetch(
 		"resource": resourceDir,
 	}
 
-	fetchSource := f.fetchSourceFactory.NewFetchSource(logger, gardenWorker, owner, resourceDir, cache, resource, resourceTypes, containerSpec, containerMetadata, imageFetchingDelegate)
+	fetchSource := f.fetchSourceFactory.NewFetchSource(logger, gardenWorker, owner,
+		resourceDir, cache, resource, resourceTypes, containerSpec, processSpec,
+		containerMetadata, imageFetchingDelegate)
 
 	ticker := f.clock.NewTicker(GetResourceLockInterval)
 	defer ticker.Stop()

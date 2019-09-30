@@ -397,7 +397,7 @@ func (scanner *resourceScanner) check(
 		Path: "/opt/resource/check",
 	}
 	res := resource.NewResource(source, nil, fromVersion)
-	newVersions, err := res.Check(context.TODO(), processSpec, container)
+	newVersions, err := res.Check(ctx, processSpec, container)
 	if err == context.DeadlineExceeded {
 		err = fmt.Errorf("Timed out after %v while checking for new versions - perhaps increase your resource check timeout?", timeout)
 	}
