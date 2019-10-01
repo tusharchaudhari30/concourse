@@ -2,8 +2,6 @@ package worker
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -326,17 +324,14 @@ func (client *client) RunGetStep(
 	}
 
 	// figure out the lockname earlier, because we have all the info
-	lockType := resourceInstanceLockID{
-		Type:       containerSpec.ImageSpec.ResourceType,
-		Version:    cache.Version(),
-		Source:     resource.Source(),
-		Params:     resource.Params(),
-		WorkerName: chosenWorker.Name(),
-	}
-	lockName, err := lockName(lockType)
-	if err != nil {
-		return GetResult{}, err
-	}
+	//lockType := resourceInstanceLockID{
+	//	Type:       containerSpec.ImageSpec.ResourceType,
+	//	Version:    cache.Version(),
+	//	Source:     resource.Source(),
+	//	Params:     resource.Params(),
+	//	WorkerName: chosenWorker.Name(),
+	//}
+	lockName := lockName(resource.Signature(), chosenWorker.Name())
 
 	//events <- runtime.Event{
 	//	EventType: runtime.StartingEvent,
@@ -604,18 +599,6 @@ func (client *client) StreamFileFromArtifact(ctx context.Context, logger lager.L
 	return source.StreamFile(ctx, logger, filePath)
 }
 
-type resourceInstanceLockID struct {
-	Type       string      `json:"type,omitempty"`
-	Version    atc.Version `json:"version,omitempty"`
-	Source     atc.Source  `json:"source,omitempty"`
-	Params     atc.Params  `json:"params,omitempty"`
-	WorkerName string      `json:"worker_name,omitempty"`
-}
-
-func lockName(id resourceInstanceLockID) (string, error) {
-	taskNameJSON, err := json.Marshal(id)
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("%x", sha256.Sum256(taskNameJSON)), nil
+func lockName(jsonRes string, workerName string) string {
+	return jsonRes + workerName
 }

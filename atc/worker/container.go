@@ -163,11 +163,6 @@ func (container *gardenWorkerContainer) RunScript(
 	recoverable bool,
 ) error {
 
-	request, err := json.Marshal(input)
-	if err != nil {
-		return err
-	}
-
 	if recoverable {
 		result, _ := container.Properties()
 		code := result[runtime.ResourceResultPropertyName]
@@ -180,7 +175,7 @@ func (container *gardenWorkerContainer) RunScript(
 	stderr := new(bytes.Buffer)
 
 	processIO := garden.ProcessIO{
-		Stdin:  bytes.NewBuffer(request),
+		Stdin:  bytes.NewBuffer(input),
 		Stdout: stdout,
 	}
 
@@ -191,6 +186,7 @@ func (container *gardenWorkerContainer) RunScript(
 	}
 
 	var process garden.Process
+	var err error
 
 	if recoverable {
 		process, err = container.Attach(ctx, runtime.ResourceProcessID, processIO)

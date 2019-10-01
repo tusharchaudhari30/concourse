@@ -2,6 +2,9 @@ package resource
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
 	"path/filepath"
 
 	"github.com/concourse/concourse/atc/runtime"
@@ -15,10 +18,7 @@ type Resource interface {
 	Get(context.Context, runtime.ProcessSpec, runtime.Runnable) (runtime.VersionResult, error)
 	Put(context.Context, runtime.ProcessSpec, runtime.Runnable) (runtime.VersionResult, error)
 	Check(context.Context, runtime.ProcessSpec, runtime.Runnable) ([]atc.Version, error)
-
-	Source() atc.Source
-	Params() atc.Params
-	Version() atc.Version
+	Signature() (string, error)
 }
 
 type ResourceType string
@@ -52,14 +52,10 @@ type resource struct {
 	version atc.Version `json:"version,omitempty"`
 }
 
-func (resource *resource) Source() atc.Source {
-	return resource.source
-}
-
-func (resource *resource) Params() atc.Params {
-	return resource.params
-}
-
-func (resource *resource) Version() atc.Version {
-	return resource.version
+func (resource *resource) Signature() (string, error) {
+	taskNameJSON, err := json.Marshal(resource)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", sha256.Sum256(taskNameJSON)), nil
 }
