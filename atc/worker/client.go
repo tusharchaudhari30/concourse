@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -331,7 +332,8 @@ func (client *client) RunGetStep(
 	//	Params:     resource.Params(),
 	//	WorkerName: chosenWorker.Name(),
 	//}
-	lockName := lockName(resource.Signature(), chosenWorker.Name())
+	sign, err := resource.Signature()
+	lockName := lockName(sign, chosenWorker.Name())
 
 	//events <- runtime.Event{
 	//	EventType: runtime.StartingEvent,
@@ -599,6 +601,7 @@ func (client *client) StreamFileFromArtifact(ctx context.Context, logger lager.L
 	return source.StreamFile(ctx, logger, filePath)
 }
 
-func lockName(jsonRes string, workerName string) string {
-	return jsonRes + workerName
+func lockName(resourceJson []byte, workerName string) string {
+	jsonRes := append(resourceJson, []byte(workerName)...)
+	return fmt.Sprintf("%x", sha256.Sum256(jsonRes))
 }

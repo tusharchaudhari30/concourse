@@ -21,7 +21,7 @@ func (resource *resource) Get(
 	err = runnable.RunScript(
 		ctx,
 		spec.Path,
-		[]string{spec.Dir},
+		spec.Args,
 		inputArgs,
 		&vr,
 		spec.StderrWriter,
