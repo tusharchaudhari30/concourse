@@ -131,7 +131,7 @@ func (step *TaskStep) Run(ctx context.Context, state RunState) error {
 
 	if step.plan.ConfigPath != "" {
 		// external task - construct a source which reads it from file
-		taskConfigSource = FileConfigSource{ConfigPath: step.plan.ConfigPath}
+		taskConfigSource = FileConfigSource{ConfigPath: step.plan.ConfigPath, Client: step.workerClient}
 
 		// for interpolation - use 'vars' from the pipeline, and then fill remaining with cred variables
 		taskVars = []vars.Variables{vars.StaticVariables(step.plan.Vars), variables}
@@ -442,9 +442,9 @@ type taskInput struct {
 	artifactsRoot string
 }
 
-func (s *taskInput) Artifact() runtime.Artifact { return s.artifact }
+func (s taskInput) Artifact() runtime.Artifact { return s.artifact }
 
-func (s *taskInput) DestinationPath() string {
+func (s taskInput) DestinationPath() string {
 	subdir := s.config.Path
 	if s.config.Path == "" {
 		subdir = s.config.Name
@@ -468,8 +468,8 @@ type taskCacheInput struct {
 	cachePath     string
 }
 
-func (s *taskCacheInput) Artifact() runtime.Artifact { return s.artifact }
+func (s taskCacheInput) Artifact() runtime.Artifact { return s.artifact }
 
-func (s *taskCacheInput) DestinationPath() string {
+func (s taskCacheInput) DestinationPath() string {
 	return filepath.Join(s.artifactsRoot, s.cachePath)
 }
