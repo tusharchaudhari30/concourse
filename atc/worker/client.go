@@ -493,6 +493,7 @@ func (client *client) RunPutStep(
 	if err != nil {
 
 		// why do we return -1 as status, are we sure a proc can't exit with -1 naturely
+		// TODO Does it make sense to return -1 here ? Probably NOT
 		return PutResult{Status: -1, VersionResult: runtime.VersionResult{}, Err: err}
 	}
 
@@ -527,7 +528,13 @@ func (client *client) RunPutStep(
 	exitStatusProp, err := container.Property(taskExitStatusPropertyName)
 	if err == nil {
 		logger.Info("already-exited", lager.Data{"status": exitStatusProp})
-		return PutResult{Status: -1, VersionResult: runtime.VersionResult{}, Err: nil}
+
+		status, err := strconv.Atoi(exitStatusProp)
+		if err != nil {
+			//TODO This is more confusing. We should differentiate failure vs. error very explicitly
+			return PutResult{-1, runtime.VersionResult{}, err}
+		}
+		return PutResult{Status: status, VersionResult: runtime.VersionResult{}, Err: nil}
 	}
 
 	vr, err = resource.Put(ctx, spec, container)
@@ -538,7 +545,6 @@ func (client *client) RunPutStep(
 			return PutResult{-1, runtime.VersionResult{}, err}
 		}
 	}
-	fmt.Println("this vr", vr)
 	return PutResult{0, vr, nil}
 }
 
