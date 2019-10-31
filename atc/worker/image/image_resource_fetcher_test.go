@@ -108,7 +108,7 @@ var _ = Describe("Image", func() {
 
 	})
 
-	AssertVersionSaveToDatabaseFails := func(expectedError error) {
+	ExpectVersionSaveToDatabaseFails := func(expectedError error) {
 		It("returns the error", func() {
 			Expect(fetchErr).To(Equal(expectedError))
 		})
@@ -408,7 +408,7 @@ var _ = Describe("Image", func() {
 						fakeImageFetchingDelegate.ImageVersionDeterminedReturns(imageVersionSavingCalamity)
 					})
 
-					AssertVersionSaveToDatabaseFails(imageVersionSavingCalamity)
+					ExpectVersionSaveToDatabaseFails(imageVersionSavingCalamity)
 				})
 			})
 
@@ -623,7 +623,7 @@ var _ = Describe("Image", func() {
 				fakeImageFetchingDelegate.ImageVersionDeterminedReturns(imageVersionSavingCalamity)
 			})
 
-			AssertVersionSaveToDatabaseFails(imageVersionSavingCalamity)
+			ExpectVersionSaveToDatabaseFails(imageVersionSavingCalamity)
 		})
 	})
 })
