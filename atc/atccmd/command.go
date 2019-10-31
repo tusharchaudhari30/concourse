@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/concourse/concourse/atc/resource"
 	"net"
 	"net/http"
 	_ "net/http/pprof"
@@ -563,11 +564,13 @@ func (cmd *RunCommand) constructAPIMembers(
 		return nil, err
 	}
 
+	resourceFactory := resource.NewResourceFactory()
 	dbResourceCacheFactory := db.NewResourceCacheFactory(dbConn, lockFactory)
 	fetchSourceFactory := worker.NewFetchSourceFactory(dbResourceCacheFactory)
 	resourceFetcher := worker.NewFetcher(clock.NewClock(), lockFactory, fetchSourceFactory)
 	dbResourceConfigFactory := db.NewResourceConfigFactory(dbConn, lockFactory)
 	imageResourceFetcherFactory := image.NewImageResourceFetcherFactory(
+		resourceFactory,
 		dbResourceCacheFactory,
 		dbResourceConfigFactory,
 		resourceFetcher,
@@ -740,11 +743,13 @@ func (cmd *RunCommand) constructBackendMembers(
 
 	teamFactory := db.NewTeamFactory(dbConn, lockFactory)
 
+	resourceFactory := resource.NewResourceFactory()
 	dbResourceCacheFactory := db.NewResourceCacheFactory(dbConn, lockFactory)
 	fetchSourceFactory := worker.NewFetchSourceFactory(dbResourceCacheFactory)
 	resourceFetcher := worker.NewFetcher(clock.NewClock(), lockFactory, fetchSourceFactory)
 	dbResourceConfigFactory := db.NewResourceConfigFactory(dbConn, lockFactory)
 	imageResourceFetcherFactory := image.NewImageResourceFetcherFactory(
+		resourceFactory,
 		dbResourceCacheFactory,
 		dbResourceConfigFactory,
 		resourceFetcher,
