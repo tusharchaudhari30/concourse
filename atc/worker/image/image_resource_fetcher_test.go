@@ -108,6 +108,16 @@ var _ = Describe("Image", func() {
 
 	})
 
+	AssertVersionSaveToDatabaseFails := func(expectedError error) {
+		It("returns the error", func() {
+			Expect(fetchErr).To(Equal(expectedError))
+		})
+
+		It("does not construct the 'get' resource", func() {
+			Expect(fakeResourceFetcher.FetchCallCount()).To(Equal(0))
+		})
+	}
+
 	JustBeforeEach(func() {
 		imageResourceFetcher = image.NewImageResourceFetcherFactory(
 			fakeResourceFactory,
@@ -393,19 +403,12 @@ var _ = Describe("Image", func() {
 				})
 
 				Context("when saving the version in the database fails", func() {
-					var imageVersionSavingCalamity error
+					var imageVersionSavingCalamity = errors.New("hang in there bud")
 					BeforeEach(func() {
-						imageVersionSavingCalamity = errors.New("hang in there bud")
 						fakeImageFetchingDelegate.ImageVersionDeterminedReturns(imageVersionSavingCalamity)
 					})
 
-					It("returns the error", func() {
-						Expect(fetchErr).To(Equal(imageVersionSavingCalamity))
-					})
-
-					It("does not construct the 'get' resource", func() {
-						Expect(fakeResourceFetcher.FetchCallCount()).To(Equal(0))
-					})
+					AssertVersionSaveToDatabaseFails(imageVersionSavingCalamity)
 				})
 			})
 
@@ -615,19 +618,12 @@ var _ = Describe("Image", func() {
 		})
 
 		Context("when saving the version in the database fails", func() {
-			var imageVersionSavingCalamity error
+			var imageVersionSavingCalamity = errors.New("hang in there bud")
 			BeforeEach(func() {
-				imageVersionSavingCalamity = errors.New("hang in there bud")
 				fakeImageFetchingDelegate.ImageVersionDeterminedReturns(imageVersionSavingCalamity)
 			})
 
-			It("returns the error", func() {
-				Expect(fetchErr).To(Equal(imageVersionSavingCalamity))
-			})
-
-			It("does not construct the 'get' resource", func() {
-				Expect(fakeResourceFetcher.FetchCallCount()).To(Equal(0))
-			})
+			AssertVersionSaveToDatabaseFails(imageVersionSavingCalamity)
 		})
 	})
 })
