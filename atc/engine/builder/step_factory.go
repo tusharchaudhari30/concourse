@@ -16,6 +16,7 @@ import (
 type stepFactory struct {
 	pool                  worker.Pool
 	client                worker.Client
+	resourceFactory       resource.ResourceFactory
 	resourceCacheFactory  db.ResourceCacheFactory
 	resourceConfigFactory db.ResourceConfigFactory
 	defaultLimits         atc.ContainerLimits
@@ -26,6 +27,7 @@ type stepFactory struct {
 func NewStepFactory(
 	pool worker.Pool,
 	client worker.Client,
+	resourceFactory resource.ResourceFactory,
 	resourceCacheFactory db.ResourceCacheFactory,
 	resourceConfigFactory db.ResourceConfigFactory,
 	defaultLimits atc.ContainerLimits,
@@ -35,6 +37,7 @@ func NewStepFactory(
 	return &stepFactory{
 		pool:                  pool,
 		client:                client,
+		resourceFactory:       resourceFactory,
 		resourceCacheFactory:  resourceCacheFactory,
 		resourceConfigFactory: resourceConfigFactory,
 		defaultLimits:         defaultLimits,

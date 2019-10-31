@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/concourse/concourse/atc/resource"
 	"net"
 	"net/http"
 	_ "net/http/pprof"
@@ -15,9 +14,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/concourse/concourse/atc/resource"
+
 	"code.cloudfoundry.org/clock"
 	"code.cloudfoundry.org/lager"
-	"github.com/concourse/concourse"
 	"github.com/concourse/concourse/atc"
 	"github.com/concourse/concourse/atc/api"
 	"github.com/concourse/concourse/atc/api/accessor"
@@ -800,6 +800,7 @@ func (cmd *RunCommand) constructBackendMembers(
 	engine := cmd.constructEngine(
 		pool,
 		workerClient,
+		resourceFactory,
 		dbResourceCacheFactory,
 		dbResourceConfigFactory,
 		secretManager,
@@ -1450,6 +1451,7 @@ func (cmd *RunCommand) configureComponentIntervals(componentFactory db.Component
 func (cmd *RunCommand) constructEngine(
 	workerPool worker.Pool,
 	workerClient worker.Client,
+	resourceFactory resource.ResourceFactory,
 	resourceCacheFactory db.ResourceCacheFactory,
 	resourceConfigFactory db.ResourceConfigFactory,
 	secretManager creds.Secrets,
@@ -1461,6 +1463,7 @@ func (cmd *RunCommand) constructEngine(
 	stepFactory := builder.NewStepFactory(
 		workerPool,
 		workerClient,
+		resourceFactory,
 		resourceCacheFactory,
 		resourceConfigFactory,
 		defaultLimits,
