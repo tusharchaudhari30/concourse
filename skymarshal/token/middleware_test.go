@@ -13,17 +13,17 @@ import (
 )
 
 var _ = Describe("Token Middleware", func() {
-	It("GetToken is the inverse of SetToken when cookies are supported", func() {
+	It("GetAuthToken is the inverse of SetAuthToken when cookies are supported", func() {
 		tokenString := "some-type some-token"
 		middleware := token.NewMiddleware(false)
 
 		testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			switch req.URL.Path {
 			case "/set":
-				middleware.SetToken(w, tokenString, time.Now().Add(1*time.Hour))
+				middleware.SetAuthToken(w, tokenString, time.Now().Add(1*time.Hour))
 			case "/get":
 				defer GinkgoRecover()
-				Expect(middleware.GetToken(req)).To(Equal(tokenString))
+				Expect(middleware.GetAuthToken(req)).To(Equal(tokenString))
 			}
 		}))
 		client := testServer.Client()

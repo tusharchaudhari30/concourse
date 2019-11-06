@@ -49,6 +49,7 @@ import (
 	"github.com/concourse/concourse/skymarshal"
 	"github.com/concourse/concourse/skymarshal/skycmd"
 	"github.com/concourse/concourse/skymarshal/storage"
+	"github.com/concourse/concourse/skymarshal/token"
 	"github.com/concourse/concourse/web"
 	"github.com/concourse/flag"
 	"github.com/concourse/retryhttp"
@@ -538,25 +539,8 @@ func (cmd *RunCommand) constructAPIMembers(
 	if err != nil {
 		return nil, err
 	}
+
 	err = cmd.configureAuthForDefaultTeam(teamFactory)
-	if err != nil {
-		return nil, err
-	}
-
-	httpClient, err := cmd.skyHttpClient()
-	if err != nil {
-		return nil, err
-	}
-
-	authHandler, err := skymarshal.NewServer(&skymarshal.Config{
-		Logger:      logger,
-		TeamFactory: teamFactory,
-		UserFactory: userFactory,
-		Flags:       cmd.Auth.AuthFlags,
-		ExternalURL: cmd.ExternalURL.String(),
-		HTTPClient:  httpClient,
-		Storage:     storage,
-	})
 	if err != nil {
 		return nil, err
 	}
@@ -612,7 +596,13 @@ func (cmd *RunCommand) constructAPIMembers(
 	dbBuildFactory := db.NewBuildFactory(dbConn, lockFactory, cmd.GC.OneOffBuildGracePeriod)
 	dbCheckFactory := db.NewCheckFactory(dbConn, lockFactory, secretManager, cmd.GlobalResourceCheckTimeout)
 
-	accessFactory := accessor.NewAccessFactory(authHandler.PublicKey())
+	keysPath, _ := url.Parse("/sky/issuer/keys")
+
+	accessFactory := accessor.NewAccessFactory(
+		cmd.ExternalURL.ResolveReference(keysPath),
+		teamFactory,
+	)
+
 	customActionRoleMap := accessor.CustomActionRoleMap{}
 	err = accessor.ParseCustomActionRoleMap(cmd.ConfigRBAC, &customActionRoleMap)
 	if err != nil {
@@ -648,51 +638,28 @@ func (cmd *RunCommand) constructAPIMembers(
 		return nil, err
 	}
 
-	webHandler, err := webHandler(logger)
+	webHandler, err := cmd.webHandler(logger)
 	if err != nil {
 		return nil, err
 	}
 
 	var httpHandler, httpsHandler http.Handler
+
 	if cmd.isTLSEnabled() {
-		httpHandler = cmd.constructHTTPHandler(
-			logger,
+		httpHandler = tlsRedirectHandler{
+			matchHostname: cmd.ExternalURL.URL.Hostname(),
+			externalHost:  cmd.ExternalURL.URL.Host,
+			baseHandler:   webHandler,
+		}
 
-			tlsRedirectHandler{
-				matchHostname: cmd.ExternalURL.URL.Hostname(),
-				externalHost:  cmd.ExternalURL.URL.Host,
-				baseHandler:   webHandler,
-			},
-
-			// note: intentionally not wrapping API; redirecting is more trouble than
-			// it's worth.
-
-			// we're mainly interested in having the web UI consistently https:// -
-			// API requests will likely not respect the redirected https:// URI upon
-			// the next request, plus the payload will have already been sent in
-			// plaintext
-			apiHandler,
-
-			tlsRedirectHandler{
-				matchHostname: cmd.ExternalURL.URL.Hostname(),
-				externalHost:  cmd.ExternalURL.URL.Host,
-				baseHandler:   authHandler,
-			},
-		)
-
-		httpsHandler = cmd.constructHTTPHandler(
-			logger,
-			webHandler,
-			apiHandler,
-			authHandler,
-		)
+		httpsHandler = webHandler
 	} else {
-		httpHandler = cmd.constructHTTPHandler(
-			logger,
-			webHandler,
-			apiHandler,
-			authHandler,
-		)
+		httpHandler = webHandler
+	}
+
+	authHandler, err := cmd.authHandler(logger, storage)
+	if err != nil {
+		return nil, err
 	}
 
 	members := []grouper.Member{
@@ -704,6 +671,14 @@ func (cmd *RunCommand) constructAPIMembers(
 			cmd.nonTLSBindAddr(),
 			httpHandler,
 		)},
+		{Name: "api", Runner: http_server.New(
+			cmd.apiBindAddr(),
+			apiHandler,
+		)},
+		{Name: "auth", Runner: http_server.New(
+			cmd.authBindAddr(),
+			authHandler,
+		)},
 	}
 
 	if httpsHandler != nil {
@@ -714,6 +689,16 @@ func (cmd *RunCommand) constructAPIMembers(
 		members = append(members, grouper.Member{Name: "web-tls", Runner: http_server.NewTLSServer(
 			cmd.tlsBindAddr(),
 			httpsHandler,
+			tlsConfig,
+		)})
+		members = append(members, grouper.Member{Name: "api-tls", Runner: http_server.NewTLSServer(
+			cmd.apiTLSBindAddr(),
+			apiHandler,
+			tlsConfig,
+		)})
+		members = append(members, grouper.Member{Name: "auth-tls", Runner: http_server.NewTLSServer(
+			cmd.authTLSBindAddr(),
+			authHandler,
 			tlsConfig,
 		)})
 	}
@@ -1093,12 +1078,24 @@ func (cmd *RunCommand) oldKey() *encryption.Key {
 	return oldKey
 }
 
-func webHandler(logger lager.Logger) (http.Handler, error) {
-	webHandler, err := web.NewHandler(logger)
+func (cmd *RunCommand) authHandler(logger lager.Logger, storage storage.Storage) (http.Handler, error) {
+	externalURL, err := url.Parse(cmd.ExternalURL.String())
 	if err != nil {
 		return nil, err
 	}
-	return metric.WrapHandler(logger, "web", webHandler), nil
+
+	httpClient, err := cmd.skyHttpClient()
+	if err != nil {
+		return nil, err
+	}
+
+	return skymarshal.NewServer(&skymarshal.Config{
+		Logger:      logger,
+		Flags:       cmd.Auth.AuthFlags,
+		ExternalURL: externalURL,
+		HTTPClient:  httpClient,
+		Storage:     storage,
+	})
 }
 
 func (cmd *RunCommand) skyHttpClient() (*http.Client, error) {
@@ -1139,8 +1136,30 @@ func (cmd *RunCommand) skyHttpClient() (*http.Client, error) {
 		SourceHost: cmd.ExternalURL.URL.Host,
 		TargetURL:  cmd.DefaultURL().URL,
 	}
-
 	return httpClient, nil
+}
+
+func (cmd *RunCommand) webHandler(logger lager.Logger) (http.Handler, error) {
+	apiURL, err := cmd.apiURL()
+	if err != nil {
+		return nil, err
+	}
+
+	authURL, err := cmd.authURL()
+	if err != nil {
+		return nil, err
+	}
+
+	middleware := token.NewMiddleware(cmd.Auth.AuthFlags.SecureCookies)
+	webHandler, err := web.NewHandler(logger, apiURL, authURL, cmd.Server.XFrameOptions, middleware)
+	if err != nil {
+		return nil, err
+	}
+
+	return wrappa.LoggerHandler{
+		Logger:  logger,
+		Handler: metric.WrapHandler(logger, "web", webHandler),
+	}, nil
 }
 
 type mitmRoundTripper struct {
@@ -1217,6 +1236,36 @@ func (cmd *RunCommand) DefaultURL() flag.URL {
 	}
 }
 
+func (cmd *RunCommand) APIURL() flag.URL {
+	url, _ := cmd.apiURL()
+	return flag.URL{
+		URL: url,
+	}
+}
+
+func (cmd *RunCommand) AuthURL() flag.URL {
+	url, _ := cmd.authURL()
+	return flag.URL{
+		URL: url,
+	}
+}
+
+func (cmd *RunCommand) apiURL() (*url.URL, error) {
+	if cmd.isTLSEnabled() {
+		return url.Parse("https://" + cmd.apiTLSBindAddr())
+	} else {
+		return url.Parse("http://" + cmd.apiBindAddr())
+	}
+}
+
+func (cmd *RunCommand) authURL() (*url.URL, error) {
+	if cmd.isTLSEnabled() {
+		return url.Parse("https://" + cmd.authTLSBindAddr())
+	} else {
+		return url.Parse("http://" + cmd.authBindAddr())
+	}
+}
+
 func run(runner ifrit.Runner, onReady func(), onExit func()) ifrit.Runner {
 	return ifrit.RunFunc(func(signals <-chan os.Signal, ready chan<- struct{}) error {
 		process := ifrit.Background(runner)
@@ -1277,6 +1326,22 @@ func (cmd *RunCommand) validate() error {
 
 func (cmd *RunCommand) nonTLSBindAddr() string {
 	return fmt.Sprintf("%s:%d", cmd.BindIP, cmd.BindPort)
+}
+
+func (cmd *RunCommand) apiBindAddr() string {
+	return fmt.Sprintf("%s:%d", cmd.defaultBindIP(), cmd.BindPort+1)
+}
+
+func (cmd *RunCommand) apiTLSBindAddr() string {
+	return fmt.Sprintf("%s:%d", cmd.defaultBindIP(), cmd.TLSBindPort+1)
+}
+
+func (cmd *RunCommand) authBindAddr() string {
+	return fmt.Sprintf("%s:%d", cmd.defaultBindIP(), cmd.BindPort+2)
+}
+
+func (cmd *RunCommand) authTLSBindAddr() string {
+	return fmt.Sprintf("%s:%d", cmd.defaultBindIP(), cmd.TLSBindPort+2)
 }
 
 func (cmd *RunCommand) tlsBindAddr() string {
@@ -1475,37 +1540,6 @@ func (cmd *RunCommand) constructEngine(
 	)
 
 	return engine.NewEngine(stepBuilder)
-}
-
-func (cmd *RunCommand) constructHTTPHandler(
-	logger lager.Logger,
-	webHandler http.Handler,
-	apiHandler http.Handler,
-	authHandler http.Handler,
-) http.Handler {
-	webMux := http.NewServeMux()
-	webMux.Handle("/api/v1/", apiHandler)
-	webMux.Handle("/sky/", authHandler)
-	webMux.Handle("/auth/", authHandler)
-	webMux.Handle("/login", authHandler)
-	webMux.Handle("/logout", authHandler)
-	webMux.Handle("/", webHandler)
-
-	httpHandler := wrappa.LoggerHandler{
-		Logger: logger,
-
-		Handler: wrappa.SecurityHandler{
-			XFrameOptions: cmd.Server.XFrameOptions,
-
-			// proxy Authorization header to/from auth cookie,
-			// to support auth from JS (EventSource) and custom JWT auth
-			Handler: auth.WebAuthHandler{
-				Handler: webMux,
-			},
-		},
-	}
-
-	return httpHandler
 }
 
 func (cmd *RunCommand) constructAPIHandler(

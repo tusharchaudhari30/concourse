@@ -131,7 +131,7 @@ var _ = Describe("Sky Server API", func() {
 					request, err := http.NewRequest("GET", skyServer.URL+"/sky/login?"+params.Encode(), nil)
 					Expect(err).NotTo(HaveOccurred())
 
-					fakeTokenMiddleware.GetTokenReturns(tokenString)
+					fakeTokenMiddleware.GetAuthTokenReturns(tokenString)
 
 					response, err = client.Do(request)
 					Expect(err).NotTo(HaveOccurred())
@@ -212,7 +212,7 @@ var _ = Describe("Sky Server API", func() {
 				_, err = client.Get(skyServer.URL + "/sky/logout")
 				Expect(err).NotTo(HaveOccurred())
 
-				Expect(fakeTokenMiddleware.UnsetTokenCallCount()).To(Equal(1))
+				Expect(fakeTokenMiddleware.UnsetAuthTokenCallCount()).To(Equal(1))
 			})
 		})
 
@@ -420,8 +420,8 @@ var _ = Describe("Sky Server API", func() {
 						cookies := cookieJar.Cookies(serverURL)
 						Expect(cookies).To(HaveLen(0))
 
-						Expect(fakeTokenMiddleware.SetTokenCallCount()).To(Equal(1))
-						_, tokenString, _ := fakeTokenMiddleware.SetTokenArgsForCall(0)
+						Expect(fakeTokenMiddleware.SetAuthTokenCallCount()).To(Equal(1))
+						_, tokenString, _ := fakeTokenMiddleware.SetAuthTokenArgsForCall(0)
 						Expect(tokenString).To(Equal("some-type some-token"))
 					})
 

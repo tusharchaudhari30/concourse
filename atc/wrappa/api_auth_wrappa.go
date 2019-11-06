@@ -152,7 +152,7 @@ func (wrappa *APIAuthWrappa) Wrap(handlers rata.Handlers) rata.Handlers {
 			panic("you missed a spot")
 		}
 
-		wrapped[name] = auth.CSRFValidationHandler(newHandler, rejector)
+		wrapped[name] = newHandler
 	}
 
 	return wrapped

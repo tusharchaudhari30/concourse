@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"code.cloudfoundry.org/lager"
+	"github.com/concourse/concourse/skymarshal/token"
 	"github.com/gobuffalo/packr"
 )
 
@@ -14,11 +15,12 @@ type templateData struct {
 }
 
 type handler struct {
-	logger   lager.Logger
-	template *template.Template
+	logger     lager.Logger
+	template   *template.Template
+	middleware token.Middleware
 }
 
-func NewHandler(logger lager.Logger) (http.Handler, error) {
+func NewHandler(logger lager.Logger, middleware token.Middleware) (http.Handler, error) {
 	tfuncs := &templateFuncs{
 		assetIDs: map[string]string{},
 	}
@@ -40,22 +42,25 @@ func NewHandler(logger lager.Logger) (http.Handler, error) {
 	}
 
 	return &handler{
-		logger:   logger,
-		template: t,
+		logger:     logger,
+		template:   t,
+		middleware: middleware,
 	}, nil
 }
 
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log := h.logger.Session("index")
 
+	authToken := h.middleware.GetAuthToken(r)
+	csrfToken := h.middleware.GetCSRFToken(r)
+
 	err := h.template.Execute(w, templateData{
-		CSRFToken: r.FormValue("csrf_token"),
-		AuthToken: r.Header.Get("Authorization"),
+		CSRFToken: csrfToken,
+		AuthToken: authToken,
 	})
 
 	if err != nil {
 		log.Fatal("failed-to-build-template", err, lager.Data{})
 		w.WriteHeader(http.StatusInternalServerError)
 	}
-
 }
