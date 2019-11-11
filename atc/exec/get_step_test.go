@@ -25,7 +25,6 @@ import (
 	"github.com/concourse/concourse/atc/resource/resourcefakes"
 	"github.com/concourse/concourse/atc/runtime"
 	"github.com/concourse/concourse/atc/worker"
-	"github.com/concourse/concourse/atc/worker/fetcher/fetcherfakes"
 	"github.com/concourse/concourse/atc/worker/workerfakes"
 	"github.com/concourse/concourse/vars"
 )
@@ -35,20 +34,27 @@ var _ = Describe("GetStep", func() {
 		ctx        context.Context
 		cancel     func()
 		testLogger *lagertest.TestLogger
+		stdoutBuf *gbytes.Buffer
+		stderrBuf *gbytes.Buffer
 
+		fakeClient *workerfakes.FakeClient
 		fakeWorker               *workerfakes.FakeWorker
 		fakePool                 *workerfakes.FakePool
 		fakeStrategy             *workerfakes.FakeContainerPlacementStrategy
-		fakeResourceFetcher      *fetcherfakes.FakeFetcher
+		fakeFetcher      *workerfakes.FakeFetcher
+
+		fakeResourceFactory *resourcefakes.FakeResourceFactory
 		fakeResourceCacheFactory *dbfakes.FakeResourceCacheFactory
+
 		fakeDelegate             *execfakes.FakeGetDelegate
+
 		getPlan                  *atc.GetPlan
 
-		fakeVersionedSource       *resourcefakes.FakeVersionedSource
+		// fakeVersionedSource       *resourcefakes.FakeVersionedSource
 		interpolatedResourceTypes atc.VersionedResourceTypes
 
 		artifactRepository *build.Repository
-		state              *execfakes.FakeRunState
+		fakeState              *execfakes.FakeRunState
 
 		getStep exec.Step
 		stepErr error
@@ -78,24 +84,33 @@ var _ = Describe("GetStep", func() {
 		testLogger = lagertest.NewTestLogger("get-action-test")
 		ctx, cancel = context.WithCancel(context.Background())
 
+		fakeClient = new(workerfakes.FakeClient)
 		fakeWorker = new(workerfakes.FakeWorker)
-		fakeResourceFetcher = new(fetcherfakes.FakeFetcher)
+		fakeFetcher = new(workerfakes.FakeFetcher)
 		fakePool = new(workerfakes.FakePool)
 		fakeStrategy = new(workerfakes.FakeContainerPlacementStrategy)
+
+		fakeResourceFactory = new(resourcefakes.FakeResourceFactory)
 		fakeResourceCacheFactory = new(dbfakes.FakeResourceCacheFactory)
 
 		credVars := vars.StaticVariables{"source-param": "super-secret-source"}
 		credVarsTracker = vars.NewCredVarsTracker(credVars, true)
 
 		artifactRepository = build.NewRepository()
-		state = new(execfakes.FakeRunState)
-		state.ArtifactsReturns(artifactRepository)
+		fakeState = new(execfakes.FakeRunState)
 
-		fakeVersionedSource = new(resourcefakes.FakeVersionedSource)
-		fakeResourceFetcher.FetchReturns(fakeVersionedSource, nil)
+		fakeState.ArtifactRepositoryReturns(artifactRepository)
+
+		// fakeVersionedSource = new(resourcefakes.FakeVersionedSource)
+		// TODO: move to context this applies for
+		fakeFetcher.FetchReturns(fakeVersionedSource, nil)
 
 		fakeDelegate = new(execfakes.FakeGetDelegate)
+		stdoutBuf = gbytes.NewBuffer()
+		stderrBuf = gbytes.NewBuffer()
 		fakeDelegate.VariablesReturns(credVarsTracker)
+		fakeDelegate.StdoutReturns(stdoutBuf)
+		fakeDelegate.StderrReturns(stderrBuf)
 
 		uninterpolatedResourceTypes := atc.VersionedResourceTypes{
 			{
@@ -145,17 +160,19 @@ var _ = Describe("GetStep", func() {
 			*plan.Get,
 			stepMetadata,
 			containerMetadata,
-			fakeResourceFetcher,
+			fakeResourceFactory,
 			fakeResourceCacheFactory,
 			fakeStrategy,
 			fakePool,
 			fakeDelegate,
+			fakeClient,
 		)
 
-		stepErr = getStep.Run(ctx, state)
+		stepErr = getStep.Run(ctx, fakeState)
 	})
 
-	It("finds or chooses a worker", func() {
+	// TODO: check this is asserted in Fetcher and remove
+	XIt("finds or chooses a worker", func() {
 		Expect(fakePool.FindOrChooseWorkerForContainerCallCount()).To(Equal(1))
 		_, _, actualOwner, actualContainerSpec, actualWorkerSpec, strategy := fakePool.FindOrChooseWorkerForContainerArgsForCall(0)
 		Expect(actualOwner).To(Equal(db.NewBuildStepContainerOwner(stepMetadata.BuildID, atc.PlanID(planID), stepMetadata.TeamID)))
@@ -184,8 +201,9 @@ var _ = Describe("GetStep", func() {
 		It("initializes the resource with the correct type and session id, making sure that it is not ephemeral", func() {
 			Expect(stepErr).ToNot(HaveOccurred())
 
-			Expect(fakeResourceFetcher.FetchCallCount()).To(Equal(1))
-			fctx, _, actualContainerMetadata, actualWorker, actualContainerSpec, actualResourceTypes, resourceInstance, delegate := fakeResourceFetcher.FetchArgsForCall(0)
+			Expect(fakeFetcher.FetchCallCount()).To(Equal(1))
+			// fctx, _, actualContainerMetadata, actualWorker, actualContainerSpec, actualResourceTypes, resourceInstance, delegate := fakeFetcher.FetchArgsForCall(0)
+			fctx, _, actualContainerMetadata, actualWorker, actualContainerSpec, actualProcessSpec, actualResource, actualOwner, actualImageFetcherSpec, actualCache,  actualLockName := fakeFetcher.FetchArgsForCall(0)
 			Expect(fctx).To(Equal(ctx))
 			Expect(actualContainerMetadata).To(Equal(db.ContainerMetadata{
 				PipelineID:       4567,
@@ -201,24 +219,34 @@ var _ = Describe("GetStep", func() {
 				TeamID: stepMetadata.TeamID,
 				Env:    stepMetadata.Env(),
 			}))
-			Expect(resourceInstance).To(Equal(resource.NewResourceInstance(
-				"some-resource-type",
-				atc.Version{"some-version": "some-value"},
-				atc.Source{"some": "super-secret-source"},
-				atc.Params{"some-param": "some-value"},
-				interpolatedResourceTypes,
-				nil,
-				db.NewBuildStepContainerOwner(stepMetadata.BuildID, atc.PlanID(planID), stepMetadata.TeamID),
-			)))
-			Expect(actualResourceTypes).To(Equal(interpolatedResourceTypes))
-			Expect(delegate).To(Equal(fakeDelegate))
+			Expect(actualProcessSpec).To(Equal(runtime.ProcessSpec{
+				Path: "/opt/resource/in",
+				Args: []string{resource.ResourcesDir("get")},
+				StdoutWriter: fakeDelegate.Stdout(),
+				StderrWriter: fakeDelegate.Stderr(),
+			}))
+			Expect(actualImageFetcherSpec).To(Equal(worker.ImageFetcherSpec{
+				ResourceTypes:interpolatedResourceTypes,
+				Delegate:fakeDelegate,
+			}))
+			Expect(actualResource).To(Equal(fakeResource))
+			// Expect(resourceInstance).To(Equal(resource.NewResourceInstance(
+			// 	"some-resource-type",
+			// 	atc.Version{"some-version": "some-value"},
+			// 	atc.Source{"some": "super-secret-source"},
+			// 	atc.Params{"some-param": "some-value"},
+			// 	interpolatedResourceTypes,
+			// 	nil,
+			// 	db.NewBuildStepContainerOwner(stepMetadata.BuildID, atc.PlanID(planID), stepMetadata.TeamID),
+			// )))
+			// Expect(actualResourceTypes).To(Equal(interpolatedResourceTypes))
 			expectedLockName := fmt.Sprintf("%x",
 				sha256.Sum256([]byte(
 					`{"type":"some-resource-type","version":{"some-version":"some-value"},"source":{"some":"super-secret-source"},"params":{"some-param":"some-value"},"worker_name":"fake-worker"}`,
 				)),
 			)
 
-			Expect(resourceInstance.LockName("fake-worker")).To(Equal(expectedLockName))
+			Expect(actualLockName).To(Equal(expectedLockName))
 		})
 
 		It("secrets are tracked", func() {
@@ -434,7 +462,7 @@ var _ = Describe("GetStep", func() {
 
 		Context("when fetching the resource exits unsuccessfully", func() {
 			BeforeEach(func() {
-				fakeResourceFetcher.FetchReturns(nil, resource.ErrResourceScriptFailed{
+				fakeFetcher.FetchReturns(nil, resource.ErrResourceScriptFailed{
 					ExitStatus: 42,
 				})
 			})
@@ -459,7 +487,7 @@ var _ = Describe("GetStep", func() {
 			disaster := errors.New("oh no")
 
 			BeforeEach(func() {
-				fakeResourceFetcher.FetchReturns(nil, disaster)
+				fakeFetcher.FetchReturns(nil, disaster)
 			})
 
 			It("does not finish the step via the delegate", func() {
