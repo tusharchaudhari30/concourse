@@ -241,7 +241,8 @@ var _ = Describe("GetStep", func() {
 			},
 		))
 	})
-	It("calls RunGetStep with the correct ContainerPlacementStrategy", func() {
+
+	It("calls RunGetStep with the correct ProcessSpec", func() {
 		_, _, _, _, _, _, _, _, actualProcessSpec, _, _ := fakeClient.RunGetStepArgsForCall(0)
 		Expect(actualProcessSpec).To(Equal(
 			runtime.ProcessSpec{
@@ -271,6 +272,7 @@ var _ = Describe("GetStep", func() {
 		})
 		It("returns an err", func() {
 			Expect(fakeClient.RunGetStepCallCount()).To(Equal(1))
+			Expect(stepErr).To(HaveOccurred())
 			Expect(stepErr).To(Equal(disaster))
 		})
 	})
@@ -279,14 +281,19 @@ var _ = Describe("GetStep", func() {
 		JustBeforeEach(func() {
 			fakeClient.RunGetStepReturns(
 				worker.GetResult{
-					0,
-					runtime.VersionResult{},
-					runtime.GetArtifact{"some-volume-handle"},
+					Status: 0,
+					VersionResult: runtime.VersionResult{
+						Version: atc.Version{"some": "version"},
+						Metadata: []atc.MetadataField{{Name: "some", Value: "metadata"}},
+					},
+					GetArtifact: runtime.GetArtifact{VolumeHandle:"some-volume-handle"},
 				}, nil)
 		})
+
 		It("registers the resulting artifact in the RunState.ArtifactRepository", func() {
 			Expect(artifactRepository.ArtifactFor(build.ArtifactName(getPlan.Name))).To(Equal(runtime.GetArtifact{"some-volume-handle"}))
 		})
+
 		It("marks the step as succeeded", func() {
 			Expect(getStep.Succeeded()).To(BeTrue())
 		})
@@ -306,15 +313,14 @@ var _ = Describe("GetStep", func() {
 
 			It("saves a version for the resource", func() {
 				Expect(fakeDelegate.UpdateVersionCallCount()).To(Equal(1))
-				_, plan, info := fakeDelegate.UpdateVersionArgsForCall(0)
-				Expect(plan.Resource).To(Equal("some-pipeline-resource"))
-				Expect(info.Version).To(Equal(atc.Version{"some": "version"}))
-				Expect(info.Metadata).To(Equal([]atc.MetadataField{{Name: "some", Value: "metadata"}}))
+				_, actualPlan, actualVersionResult := fakeDelegate.UpdateVersionArgsForCall(0)
+				Expect(actualPlan.Resource).To(Equal("some-pipeline-resource"))
+				Expect(actualVersionResult.Version).To(Equal(atc.Version{"some": "version"}))
+				Expect(actualVersionResult.Metadata).To(Equal([]atc.MetadataField{{Name: "some", Value: "metadata"}}))
 			})
 		})
 
 		Context("when getting an anonymous resource", func() {
-
 			BeforeEach(func() {
 				getPlan.Resource = ""
 			})
@@ -323,19 +329,34 @@ var _ = Describe("GetStep", func() {
 				Expect(fakeDelegate.UpdateVersionCallCount()).To(Equal(0))
 			})
 		})
+
+		It("does not return an err", func() {
+			Expect(stepErr).ToNot(HaveOccurred())
+		})
 	})
 
 	Context("when Client.RunGetStep returns a Failed GetResult", func() {
+		JustBeforeEach(func() {
+			fakeClient.RunGetStepReturns(
+				worker.GetResult{
+					Status: 1,
+					VersionResult: runtime.VersionResult{},
+				}, nil)
+		})
+
 		It("does NOT mark the step as succeeded", func() {
 			Expect(getStep.Succeeded()).To(BeFalse())
 		})
 
 		It("finishes the step via the delegate", func() {
 			Expect(fakeDelegate.FinishedCallCount()).To(Equal(1))
-			_, status, info := fakeDelegate.FinishedArgsForCall(0)
-			Expect(status).ToNot(Equal(exec.ExitStatus(0)))
-			Expect(info.Version).To(Equal(atc.Version{"some": "version"}))
-			Expect(info.Metadata).To(Equal([]atc.MetadataField{{Name: "some", Value: "metadata"}}))
+			_, actualExitStatus, actualVersionResult := fakeDelegate.FinishedArgsForCall(0)
+			Expect(actualExitStatus).ToNot(Equal(exec.ExitStatus(0)))
+			Expect(actualVersionResult).To(Equal(runtime.VersionResult{}))
+		})
+
+		It("does not return an err", func() {
+			Expect(stepErr).ToNot(HaveOccurred())
 		})
 
 	})
@@ -405,20 +426,15 @@ var _ = Describe("GetStep", func() {
 		})
 
 		Context("when fetching resource succeeds", func() {
-			BeforeEach(func() {
-				fakeVersionedSource.VersionReturns(atc.Version{"some": "version"})
-				fakeVersionedSource.MetadataReturns([]atc.MetadataField{{Name: "some", Value: "metadata"}})
-			})
-
-			It("returns nil", func() {
+			XIt("returns nil", func() {
 				Expect(stepErr).ToNot(HaveOccurred())
 			})
 
-			It("is successful", func() {
+			XIt("is successful", func() {
 				Expect(getStep.Succeeded()).To(BeTrue())
 			})
 
-			It("finishes the step via the delegate", func() {
+			XIt("finishes the step via the delegate", func() {
 				Expect(fakeDelegate.FinishedCallCount()).To(Equal(1))
 				_, status, info := fakeDelegate.FinishedArgsForCall(0)
 				Expect(status).To(Equal(exec.ExitStatus(0)))
@@ -426,7 +442,7 @@ var _ = Describe("GetStep", func() {
 				Expect(info.Metadata).To(Equal([]atc.MetadataField{{Name: "some", Value: "metadata"}}))
 			})
 
-			Context("when the plan has a resource", func() {
+			XContext("when the plan has a resource", func() {
 				BeforeEach(func() {
 					getPlan.Resource = "some-pipeline-resource"
 				})
@@ -440,7 +456,7 @@ var _ = Describe("GetStep", func() {
 				})
 			})
 
-			Context("when getting an anonymous resource", func() {
+			XContext("when getting an anonymous resource", func() {
 
 				BeforeEach(func() {
 					getPlan.Resource = ""
@@ -609,67 +625,6 @@ var _ = Describe("GetStep", func() {
 			})
 		})
 
-		Context("when fetching the resource exits unsuccessfully", func() {
-			BeforeEach(func() {
-				fakeFetcher.FetchReturns(nil, resource.ErrResourceScriptFailed{
-					ExitStatus: 42,
-				})
-			})
-
-			It("finishes the step via the delegate", func() {
-				Expect(fakeDelegate.FinishedCallCount()).To(Equal(1))
-				_, status, info := fakeDelegate.FinishedArgsForCall(0)
-				Expect(status).To(Equal(exec.ExitStatus(42)))
-				Expect(info).To(BeZero())
-			})
-
-			It("returns nil", func() {
-				Expect(stepErr).ToNot(HaveOccurred())
-			})
-
-			It("is not successful", func() {
-				Expect(getStep.Succeeded()).To(BeFalse())
-			})
-		})
-
-		Context("when fetching the resource errors", func() {
-			disaster := errors.New("oh no")
-
-			BeforeEach(func() {
-				fakeFetcher.FetchReturns(nil, disaster)
-			})
-
-			It("does not finish the step via the delegate", func() {
-				Expect(fakeDelegate.FinishedCallCount()).To(Equal(0))
-			})
-
-			It("returns the error", func() {
-				Expect(stepErr).To(Equal(disaster))
-			})
-
-			It("is not successful", func() {
-				Expect(getStep.Succeeded()).To(BeFalse())
-			})
-		})
 	})
 
-	Context("when finding or choosing the worker exits unsuccessfully", func() {
-		disaster := errors.New("oh no")
-
-		BeforeEach(func() {
-			fakePool.FindOrChooseWorkerForContainerReturns(nil, disaster)
-		})
-
-		It("does not finish the step via the delegate", func() {
-			Expect(fakeDelegate.FinishedCallCount()).To(Equal(0))
-		})
-
-		It("returns the error", func() {
-			Expect(stepErr).To(Equal(disaster))
-		})
-
-		It("is not successful", func() {
-			Expect(getStep.Succeeded()).To(BeFalse())
-		})
-	})
 })
