@@ -129,6 +129,7 @@ func (s *buildStarter) tryStartNextPendingBuild(
 		logger.Error("failed-to-check-if-pipeline-is-paused", err)
 		return false, err
 	}
+
 	if pipelinePaused {
 		return false, nil
 	}
@@ -176,10 +177,13 @@ func (s *buildStarter) tryStartNextPendingBuild(
 
 	plan, err := s.factory.Create(job.Config(), resourceConfigs, resourceTypes, buildInputs)
 	if err != nil {
+		logger.Error("failed-to-create-build-plan", err)
+
 		// Don't use ErrorBuild because it logs a build event, and this build hasn't started
 		if err = nextPendingBuild.Finish(db.BuildStatusErrored); err != nil {
 			logger.Error("failed-to-mark-build-as-errored", err)
 		}
+
 		return false, nil
 	}
 
